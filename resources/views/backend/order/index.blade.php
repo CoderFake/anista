@@ -97,7 +97,7 @@
     <div class="col-lg-12">
         <div class="ibox float-e-margins">
             <div class="ibox-title uk-flex uk-flex-middle uk-flex-space-between">
-                <h5>{{ $config['seo']['index']['table']; }} </h5>
+                <h5>{{ $config['seo']['index']['table'] }} </h5>
                 @include('backend.dashboard.component.toolbox', ['model' => $config['model']])
             </div>
             <div class="ibox-content">

@@ -176,6 +176,13 @@ Route::group(['middleware' => 'license'], function () {
    Route::get('he-thong-phan-phoi' . config('apps.general.suffix'), [FeDistributionController::class, 'index'])->name('distribution.list.index');
    Route::get('danh-sach-yeu-thich' . config('apps.general.suffix'), [FeProductCatalogueController::class, 'wishlist'])->name('product.catalogue.wishlist');
    Route::get('thanh-toan' . config('apps.general.suffix'), [CartController::class, 'checkout'])->name('cart.checkout');
+   Route::get('payment/process/{orderId}/{method}', [CartController::class, 'processPayment'])->name('payment.process');
+
+   // Routes callback cho các cổng thanh toán
+   Route::get('return/vnpay', [VnpayController::class, 'vnpay_return'])->name('vnpay.return');
+   Route::get('return/ipn', [VnpayController::class, 'vnpay_ipn'])->name('vnpay.ipn');
+   Route::get('return/momo', [MomoController::class, 'momo_return'])->name('momo.return');
+   Route::get('return/paypal', [PaypalController::class, 'paypal_return'])->name('paypal.return');
    Route::get('{canonical}' . config('apps.general.suffix'), [RouterController::class, 'index'])->name('router.index')->where('canonical', '[a-zA-Z0-9-]+');
    Route::get('{canonical}/trang-{page}' . config('apps.general.suffix'), [RouterController::class, 'page'])->name('router.page')->where('canonical', '[a-zA-Z0-9-]+')->where('page', '[0-9]+');
    Route::post('cart/create', [CartController::class, 'store'])->name('cart.store');

@@ -45,6 +45,8 @@ class RepositoryServiceProvider extends ServiceProvider
 
         'App\Repositories\Interfaces\AgencyRepositoryInterface' => 'App\Repositories\AgencyRepository',
         'App\Repositories\Interfaces\ConstructRepositoryInterface' => 'App\Repositories\ConstructRepository',
+        'App\Repositories\Interfaces\WardRepositoryInterface' => 'App\Repositories\WardRepository',
+        'App\Repositories\Interfaces\OrderPaymentRepositoryInterface' => 'App\Repositories\OrderPaymentRepository',
     ];
 
     public function register(): void

@@ -2,163 +2,147 @@
 
 namespace App\Http\Controllers\Frontend\Payment;
 
-use App\Http\Controllers\FrontendController;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Repositories\Interfaces\OrderRepositoryInterface  as OrderRepository;
-use App\Services\Interfaces\OrderServiceInterface  as OrderService;
+use App\Repositories\Interfaces\OrderRepositoryInterface as OrderRepository;
+use App\Repositories\Interfaces\OrderPaymentRepositoryInterface as OrderPaymentRepository;
+use Illuminate\Support\Facades\Log;
 
-
-class MomoController extends FrontendController
+class MomoController extends Controller
 {
-  
     protected $orderRepository;
-    protected $orderService;
+    protected $orderPaymentRepository;
 
     public function __construct(
         OrderRepository $orderRepository,
-        OrderService $orderService,
-    ){
-       
+        OrderPaymentRepository $orderPaymentRepository = null
+    ) {
         $this->orderRepository = $orderRepository;
-        $this->orderService = $orderService;
-        parent::__construct();
+        $this->orderPaymentRepository = $orderPaymentRepository;
     }
 
-
-    public function momo_return(Request $request){
-
-
-        $momoConfig = momoConfig();
-
-        $secretKey = $momoConfig['secretKey']; //Put your secret key in there
-        $partnerCode = $momoConfig['partnerCode']; //Put your secret key in there
-        $accessKey = $momoConfig['accessKey']; //Put your secret key in there
-
-        if (!empty($_GET)) {
-           
-            $rawData = "accessKey=".$accessKey;
-            $rawData .= "&amount=".$_GET['amount'];
-            $rawData .= "&extraData=".$_GET['extraData'];
-            $rawData .= "&message=".$_GET['message'];
-            $rawData .= "&orderId=".$_GET['orderId'];
-            $rawData .= "&orderInfo=".$_GET['orderInfo'];
-            $rawData .= "&orderType=".$_GET['orderType'];
-            $rawData .= "&partnerCode=".$_GET['partnerCode'];
-            $rawData .= "&payType=".$_GET['payType'];
-            $rawData .= "&requestId=".$_GET['requestId'];
-            $rawData .= "&responseTime=".$_GET['responseTime'];
-            $rawData .= "&resultCode=".$_GET['resultCode'];
-            $rawData .= "&transId=".$_GET['transId'];
-
-
-           
-            $partnerSignature = hash_hmac("sha256", $rawData, $secretKey);
-            $m2signature = $_GET['signature'];
-
-
-            if($partnerSignature == $m2signature){
-                $orderId = $_GET['orderId'];
-                $order = $this->orderRepository->findByCondition([
-                    ['code', '=', $orderId],
-                ], false, ['products']);
-
-                $payload['payment'] = 'paid';
-                $payload['confirm'] = 'confirm';
-                $flag = $this->orderService->updatePaymentOnline($payload, $order);
-            }
-
-            $momo = [
-                'm2signature' => $m2signature,
-                'partnerSignature' => $partnerSignature,
-                'message' => $_GET['message'],
-            ];
-            
-            $orderId = $_GET['orderId'];
+    public function momo_return(Request $request)
+    {
+        $orderId = $request->input('orderId');
+        $requestId = $request->input('requestId');
+        $amount = $request->input('amount');
+        $orderInfo = $request->input('orderInfo');
+        $resultCode = $request->input('resultCode');
+        $message = $request->input('message');
+        $transId = $request->input('transId');
+        $extraData = $request->input('extraData');
+        $signature = $request->input('signature');
+        
+        Log::info('MoMo return callback received', [
+            'order_id' => $orderId,
+            'result_code' => $resultCode,
+            'trans_id' => $transId,
+            'all_params' => $request->all()
+        ]);
+        
+        $orderCode = preg_replace('/[^0-9]/', '', $orderId);
+        
+        try {
             $order = $this->orderRepository->findByCondition([
-                ['code', '=', $orderId],
-            ], false, ['products']);
-
-            $system = $this->system;
-            $seo = [
-                'meta_title' => 'Thông tin thanh toán mã đơn hàng #'.$orderId,
-                'meta_keyword' => '',
-                'meta_description' => '',
-                'meta_image' => '',
-                'canonical' => write_url('cart/success', TRUE, TRUE),
-            ];
+                ['code', '=', $orderCode]
+            ]);
             
-            $template = 'frontend.cart.component.momo';
-            return view('frontend.cart.success', compact(
-                'seo',
-                'system',
-                'order',
-                'template',
-                'momo'
-            ));
-        }
-    
-    }
-
-    public function momo_ipn(){
-        http_response_code(200); //200 - Everything will be 200 Oke
-
-        $momoConfig = momoConfig();
-
-        $secretKey = $momoConfig['secretKey']; //Put your secret key in there
-        if (!empty($_POST)) {
-            $response = array();
-            try {
-               
-                //Checksum
-                $rawData = "accessKey=".$accessKey;
-                $rawData .= "&amount=".$_POST['amount'];
-                $rawData .= "&extraData=".$_POST['extraData'];
-                $rawData .= "&message=".$_POST['message'];
-                $rawData .= "&orderId=".$_POST['orderId'];
-                $rawData .= "&orderInfo=".$_POST['orderInfo'];
-                $rawData .= "&orderType=".$_POST['orderType'];
-                $rawData .= "&partnerCode=".$_POST['partnerCode'];
-                $rawData .= "&payType=".$_POST['payType'];
-                $rawData .= "&requestId=".$_POST['requestId'];
-                $rawData .= "&responseTime=".$_POST['responseTime'];
-                $rawData .= "&resultCode=".$_POST['resultCode'];
-                $rawData .= "&transId=".$_POST['transId'];
-
-                $partnerSignature = hash_hmac("sha256", $rawHash, $secretKey);
-
-                if ($m2signature == $partnerSignature) {
-
-                    $order = $this->orderRepository->findByCondition([
-                        ['code', '=', $orderId],
-                    ], false, ['products']);
-
-                    $payload['payment'] = 'paid';
-                    $payload['confirm'] = 'confirm';
-                    $flag = $this->orderService->updatePaymentOnline($payload, $order);
-
-                } else {
-                    $result = '<div class="alert alert-danger">This transaction could be hacked, please check your signature and returned signature</div>';
+            if (!$order) {
+                Log::error('Order not found', ['order_code' => $orderCode]);
+                return redirect()->route('home.index')->with('error', 'Không tìm thấy đơn hàng');
+            }
+            
+            if ($resultCode == '0') {
+                try {
+                    $this->orderRepository->update($order->id, ['payment' => 'paid']);
+                    Log::info('Order payment status updated successfully', ['order_id' => $order->id]);
+                    
+                    if ($this->orderPaymentRepository) {
+                        $this->orderPaymentRepository->create([
+                            'order_id' => $order->id,
+                            'method_name' => 'momo',
+                            'payment_id' => $transId,
+                            'payment_detail' => $request->all()
+                        ]);
+                        Log::info('Payment details saved successfully', ['order_id' => $order->id]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Failed to update order payment status', [
+                        'order_id' => $order->id,
+                        'error' => $e->getMessage()
+                    ]);
                 }
-
-            } catch (Exception $e) {
-                echo $response['message'] = $e;
-            }
-
-            $debugger = array();
-            $debugger['rawData'] = $rawHash;
-            $debugger['momoSignature'] = $m2signature;
-            $debugger['partnerSignature'] = $partnerSignature;
-
-            if ($m2signature == $partnerSignature) {
-                $response['message'] = "Received payment result success";
             } else {
-                $response['message'] = "ERROR! Fail checksum";
+                Log::warning('MoMo payment failed', [
+                    'order_id' => $order->id,
+                    'result_code' => $resultCode,
+                    'message' => $message
+                ]);
             }
-            $response['debugger'] = $debugger;
-            echo json_encode($response);
+        } catch (\Exception $e) {
+            Log::error('Error processing MoMo callback', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->route('home.index')->with('error', 'Có lỗi xảy ra trong quá trình xử lý thanh toán');
         }
+        
+        return redirect()->route('cart.success', ['code' => $order->code]);
     }
+    
+    public function momo_ipn(Request $request)
+    {
+        
+        $orderId = $request->input('orderId');
+        $resultCode = $request->input('resultCode');
+        $transId = $request->input('transId');
+        
+        Log::info('MoMo IPN callback received', [
+            'order_id' => $orderId,
+            'result_code' => $resultCode,
+            'trans_id' => $transId
+        ]);
+        
+        $orderCode = preg_replace('/[^0-9]/', '', $orderId);
+        
+        try {
+            $order = $this->orderRepository->findByCondition([
+                ['code', '=', $orderCode]
+            ]);
+            
+            if (!$order) {
+                Log::error('Order not found in IPN', ['order_code' => $orderCode]);
+                return response()->json(['message' => 'Order not found'], 404);
+            }
 
-  
+            if ($resultCode == '0') {
+                $this->orderRepository->update($order->id, ['payment' => 'paid']);
+                Log::info('Order payment status updated by IPN', ['order_id' => $order->id]);
 
+                if ($this->orderPaymentRepository) {
+                    $this->orderPaymentRepository->create([
+                        'order_id' => $order->id,
+                        'method_name' => 'momo',
+                        'payment_id' => $transId,
+                        'payment_detail' => $request->all()
+                    ]);
+                }
+                
+                return response()->json(['message' => 'Success'], 200);
+            } else {
+                Log::warning('MoMo IPN payment failed', [
+                    'order_id' => $order->id,
+                    'result_code' => $resultCode
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error processing MoMo IPN', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+        
+        return response()->json(['message' => 'Payment failed'], 400);
+    }
 }

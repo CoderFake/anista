@@ -34,7 +34,7 @@
                 </td>
                 <td>
                     <div class="discount-information text-center">
-                        {!! renderDiscountInformation($promotion);  !!}
+                        {!! renderDiscountInformation($promotion)  !!}
                          
                     </div>
                 </td>
@@ -47,7 +47,7 @@
                     {{ $startDate }}
                 </td>
                 <td>
-                    {{ ($promotion->neverEndDate === 'accept') ? 'Không giới hạn' : $endDate; }}
+                    {{ ($promotion->neverEndDate === 'accept') ? 'Không giới hạn' : $endDate }}
                 </td>
                 <td class="text-center js-switch-{{ $promotion->id }}"> 
                     <input type="checkbox" value="{{ $promotion->publish }}" class="js-switch status " data-field="publish" data-model="{{ $config['model'] }}" {{ ($promotion->publish == 2) ? 'checked' : '' }} data-modelId="{{ $promotion->id }}" />

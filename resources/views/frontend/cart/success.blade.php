@@ -15,7 +15,7 @@
                             <div class="order-title uk-text-center">ĐƠN HÀNG #{{ $order->code }}</div>
                         </div>
                         <div class="uk-width-large-1-3">
-                            <div class="order-date">{{ convertDateTime($order->created_at); }}</div>
+                            <div class="order-date">{{ convertDateTime($order->created_at)}}</div>
                         </div>
                     </div>
                 </div>

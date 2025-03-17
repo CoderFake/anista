@@ -41,7 +41,7 @@
                             <tr class="order-item">
                                 <td>
                                     <div class="image">
-                                        <span class="image img-scaledown"><img src="{{ $image; }}" alt=""></span>
+                                        <span class="image img-scaledown"><img src="{{ $image }}" alt=""></span>
                                     </div>
                                 </td>
                                 <td style="width:285px;">

@@ -2,206 +2,187 @@
 
 namespace App\Http\Controllers\Frontend\Payment;
 
-use App\Http\Controllers\FrontendController;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Repositories\Interfaces\OrderRepositoryInterface  as OrderRepository;
-use App\Services\Interfaces\OrderServiceInterface  as OrderService;
+use App\Repositories\Interfaces\OrderRepositoryInterface as OrderRepository;
+use App\Repositories\Interfaces\OrderPaymentRepositoryInterface as OrderPaymentRepository;
+use Illuminate\Support\Facades\Log;
 
-
-class VnpayController extends FrontendController
+class VnpayController extends Controller
 {
-  
     protected $orderRepository;
-    protected $orderService;
+    protected $orderPaymentRepository;
 
     public function __construct(
         OrderRepository $orderRepository,
-        OrderService $orderService,
-    ){
-       
+        OrderPaymentRepository $orderPaymentRepository = null
+    ) {
         $this->orderRepository = $orderRepository;
-        $this->orderService = $orderService;
-        parent::__construct();
+        $this->orderPaymentRepository = $orderPaymentRepository;
     }
 
+    public function vnpay_return(Request $request)
+    {
+        $vnp_TxnRef = $request->input('vnp_TxnRef');
+        $vnp_Amount = $request->input('vnp_Amount');
+        $vnp_ResponseCode = $request->input('vnp_ResponseCode');
+        $vnp_TransactionNo = $request->input('vnp_TransactionNo');
+        $vnp_BankCode = $request->input('vnp_BankCode');
+        $vnp_PayDate = $request->input('vnp_PayDate');
+        $vnp_SecureHash = $request->input('vnp_SecureHash');
 
-    public function vnpay_return(Request $request){
-
-        $orderCode = $request->input('vnp_TxnRef');
-       
-        $system = $this->system;
-        $seo = [
-            'meta_title' => 'Thông tin thanh toán mã đơn hàng #'.$orderCode,
-            'meta_keyword' => '',
-            'meta_description' => '',
-            'meta_image' => '',
-            'canonical' => write_url('cart/success', TRUE, TRUE),
-        ];
-
-        $configVnpay = vnpayConfig();
-          
-        $vnp_TmnCode = $configVnpay['vnp_TmnCode'];
-        $vnp_HashSecret = $configVnpay['vnp_HashSecret']; 
-        $vnp_Url = $configVnpay['vnp_Url'];
-        $vnp_Returnurl = $configVnpay['vnp_Returnurl'];
-        $vnp_apiUrl = $configVnpay['vnp_apiUrl'];
-        $apiUrl = $configVnpay['apiUrl'];
-        $startTime = date("YmdHis");
-        $expire = date('YmdHis',strtotime('+15 minutes',strtotime($startTime)));
-
-
-        $vnp_SecureHash = $_GET['vnp_SecureHash'];
-        $inputData = array();
-        foreach ($_GET as $key => $value) {
-            if (substr($key, 0, 4) == "vnp_") {
-                $inputData[$key] = $value;
-            }
-        }
-        
-        unset($inputData['vnp_SecureHash']);
-        ksort($inputData);
-        $i = 0;
-        $hashData = "";
-        foreach ($inputData as $key => $value) {
-            if ($i == 1) {
-                $hashData = $hashData . '&' . urlencode($key) . "=" . urlencode($value);
-            } else {
-                $hashData = $hashData . urlencode($key) . "=" . urlencode($value);
-                $i = 1;
-            }
-        }
-
-        $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
-        if ($secureHash == $vnp_SecureHash) {
-            if ($_GET['vnp_ResponseCode'] == '00') {
-                $order = $this->orderRepository->findByCondition([
-                    ['code', '=', $orderCode],
-                ], false, ['products']);
-
-
-                $template = 'frontend.cart.component.vnpay';
-                return view('frontend.cart.success', compact(
-                    'seo',
-                    'system',
-                    'order',
-                    'template',
-                    'secureHash',
-                    'vnp_SecureHash',
-                ));
-            } 
-            else {
-                echo "GD Khong thanh cong"; die();
-            }
-        } else {
-            echo "Chu ky khong hop le"; die();
-        }
-    }
-
-    public function vnpay_ipn(){
-
-        $configVnpay = vnpayConfig();
-          
-        $vnp_TmnCode = $configVnpay['vnp_TmnCode'];
-        $vnp_HashSecret = $configVnpay['vnp_HashSecret']; 
-        $vnp_Url = $configVnpay['vnp_Url'];
-        $vnp_Returnurl = $configVnpay['vnp_Returnurl'];
-        $vnp_apiUrl = $configVnpay['vnp_apiUrl'];
-        $apiUrl = $configVnpay['apiUrl'];
-        $startTime = date("YmdHis");
-        $expire = date('YmdHis',strtotime('+15 minutes',strtotime($startTime)));
-
-
-
-        $inputData = array();
-        $returnData = array();
-
-        foreach ($_GET as $key => $value) {
-            if (substr($key, 0, 4) == "vnp_") {
-                $inputData[$key] = $value;
-            }
-        }
-
-        $vnp_SecureHash = $inputData['vnp_SecureHash'];
-        unset($inputData['vnp_SecureHash']);
-        ksort($inputData);
-        $i = 0;
-        $hashData = "";
-        foreach ($inputData as $key => $value) {
-            if ($i == 1) {
-                $hashData = $hashData . '&' . urlencode($key) . "=" . urlencode($value);
-            } else {
-                $hashData = $hashData . urlencode($key) . "=" . urlencode($value);
-                $i = 1;
-            }
-        }
-
-        $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
-        $vnpTranId = $inputData['vnp_TransactionNo']; //Mã giao dịch tại VNPAY
-        $vnp_BankCode = $inputData['vnp_BankCode']; //Ngân hàng thanh toán
-        $vnp_Amount = $inputData['vnp_Amount']/100; // Số tiền thanh toán VNPAY phản hồi
-
-        $Status = 0; // Là trạng thái thanh toán của giao dịch chưa có IPN lưu tại hệ thống của merchant chiều khởi tạo URL thanh toán.
-        $orderId = $inputData['vnp_TxnRef'];
+        Log::info('VNPAY return callback received', [
+            'order_code' => $vnp_TxnRef,
+            'response_code' => $vnp_ResponseCode,
+            'transaction_no' => $vnp_TransactionNo,
+            'all_params' => $request->all()
+        ]);
         
         try {
-            //Check Orderid    
-            //Kiểm tra checksum của dữ liệu
-            if ($secureHash == $vnp_SecureHash) {
-                //Lấy thông tin đơn hàng lưu trong Database và kiểm tra trạng thái của đơn hàng, mã đơn hàng là: $orderId            
-                //Việc kiểm tra trạng thái của đơn hàng giúp hệ thống không xử lý trùng lặp, xử lý nhiều lần một giao dịch
-                //Giả sử: $order = mysqli_fetch_assoc($result);   
-
-                $payload = [];
-                $order = $this->orderRepository->findByCondition([
-                    ['code', '=', $orderId],
-                ], false, ['products']);
-
-                if ($order != NULL) {
-
-                    $orderAmount = $order->cart['cartTotal'] - $order->promotion['discount'];
-
-                    if($orderAmount == $vnp_Amount) //Kiểm tra số tiền thanh toán của giao dịch: giả sử số tiền kiểm tra là đúng. //$order["Amount"] == $vnp_Amount
-                    {
-                        if ($order->payment != NULL && $order->payment == 'unpaid') {
-                            if ($inputData['vnp_ResponseCode'] == '00' || $inputData['vnp_TransactionStatus'] == '00') {
-                               $payload['payment'] = 'paid';
-                               $payload['confirm'] = 'confirm';
-                            }else{
-                                $payload['payment'] = 'failed';
-                                $payload['confirm'] = 'confirm';
-                            }
-
-                            $flag = $this->orderService->updatePaymentOnline($payload, $order);
-
-                                  
-                            $returnData['RspCode'] = '00';
-                            $returnData['Message'] = 'Confirm Success';
-                        } else {
-                            $returnData['RspCode'] = '02';
-                            $returnData['Message'] = 'Order already confirmed';
-                        }
+            $order = $this->orderRepository->findByCondition([
+                ['code', '=', $vnp_TxnRef]
+            ]);
+            
+            if (!$order) {
+                Log::error('Order not found', ['order_code' => $vnp_TxnRef]);
+                return redirect()->route('home.index')->with('error', 'Không tìm thấy đơn hàng');
+            }
+            
+            $secureHash = $this->calculateSecureHash($request);
+            $isValidSignature = ($secureHash == $vnp_SecureHash);
+            
+            Log::info('VNPAY signature validation', [
+                'calculated_hash' => $secureHash,
+                'received_hash' => $vnp_SecureHash,
+                'is_valid' => $isValidSignature
+            ]);
+            
+            if ($isValidSignature && $vnp_ResponseCode == '00') {
+                try {
+                    $this->orderRepository->update($order->id, ['payment' => 'paid']);
+                    Log::info('Order payment status updated successfully', ['order_id' => $order->id]);
+                    
+                    if ($this->orderPaymentRepository) {
+                        $this->orderPaymentRepository->create([
+                            'order_id' => $order->id,
+                            'method_name' => 'vnpay',
+                            'payment_id' => $vnp_TransactionNo,
+                            'payment_detail' => $request->all()
+                        ]);
+                        Log::info('Payment details saved successfully', ['order_id' => $order->id]);
                     }
-                    else {
-                        $returnData['RspCode'] = '04';
-                        $returnData['Message'] = 'invalid amount';
-                    }
-                } else {
-                    $returnData['RspCode'] = '01';
-                    $returnData['Message'] = 'Order not found';
+                } catch (\Exception $e) {
+                    Log::error('Failed to update order payment status', [
+                        'order_id' => $order->id,
+                        'error' => $e->getMessage()
+                    ]);
                 }
             } else {
-                $returnData['RspCode'] = '97';
-                $returnData['Message'] = 'Invalid signature';
+                Log::warning('VNPAY payment failed or invalid signature', [
+                    'order_id' => $order->id,
+                    'response_code' => $vnp_ResponseCode,
+                    'is_valid_signature' => $isValidSignature
+                ]);
             }
-        } catch (Exception $e) {
-            $returnData['RspCode'] = '99';
-            $returnData['Message'] = 'Unknow error';
+        } catch (\Exception $e) {
+            Log::error('Error processing VNPAY callback', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->route('home.index')->with('error', 'Có lỗi xảy ra trong quá trình xử lý thanh toán');
         }
-        //Trả lại VNPAY theo định dạng JSON
-        echo json_encode($returnData);
-                
+        
+        return redirect()->route('cart.success', ['code' => $order->code]);
     }
+    
+    public function vnpay_ipn(Request $request)
+    {
 
-  
+        $vnp_TxnRef = $request->input('vnp_TxnRef');
+        $vnp_Amount = $request->input('vnp_Amount');
+        $vnp_ResponseCode = $request->input('vnp_ResponseCode');
+        $vnp_TransactionNo = $request->input('vnp_TransactionNo');
+        $vnp_SecureHash = $request->input('vnp_SecureHash');
+        
+        Log::info('VNPAY IPN callback received', [
+            'order_code' => $vnp_TxnRef,
+            'response_code' => $vnp_ResponseCode,
+            'transaction_no' => $vnp_TransactionNo
+        ]);
+        
+        try {
+            $order = $this->orderRepository->findByCondition([
+                ['code', '=', $vnp_TxnRef]
+            ]);
+            
+            if (!$order) {
+                Log::error('Order not found in IPN', ['order_code' => $vnp_TxnRef]);
+                return response('Order not found', 404);
+            }
+            
+            $secureHash = $this->calculateSecureHash($request);
+            $isValidSignature = ($secureHash == $vnp_SecureHash);
+            
+            if ($isValidSignature && $vnp_ResponseCode == '00') {
+                $this->orderRepository->update($order->id, ['payment' => 'paid']);
+                Log::info('Order payment status updated by IPN', ['order_id' => $order->id]);
 
+                if ($this->orderPaymentRepository) {
+                    $this->orderPaymentRepository->create([
+                        'order_id' => $order->id,
+                        'method_name' => 'vnpay',
+                        'payment_id' => $vnp_TransactionNo,
+                        'payment_detail' => $request->all()
+                    ]);
+                }
+                
+                return response('OK', 200);
+            } else {
+                Log::warning('VNPAY IPN validation failed', [
+                    'order_id' => $order->id,
+                    'is_valid_signature' => $isValidSignature,
+                    'response_code' => $vnp_ResponseCode
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error processing VNPAY IPN', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+        
+        return response('Failed', 400);
+    }
+    
+    private function calculateSecureHash(Request $request)
+    {
+        $vnpParams = $request->all();
+        
+        if (isset($vnpParams['vnp_SecureHash'])) {
+            unset($vnpParams['vnp_SecureHash']);
+        }
+        
+        if (isset($vnpParams['vnp_SecureHashType'])) {
+            unset($vnpParams['vnp_SecureHashType']);
+        }
+        
+        ksort($vnpParams);
+        
+        $i = 0;
+        $hashData = "";
+        foreach ($vnpParams as $key => $value) {
+            if ($i == 1) {
+                $hashData = $hashData . '&' . urlencode($key) . "=" . urlencode($value);
+            } else {
+                $hashData = $hashData . urlencode($key) . "=" . urlencode($value);
+                $i = 1;
+            }
+        }
+        
+        $vnp_HashSecret = vnpayConfig()['vnp_HashSecret'];
+        $secureHash = hash_hmac('sha512', $hashData, $vnp_HashSecret);
+        
+        return $secureHash;
+    }
 }
